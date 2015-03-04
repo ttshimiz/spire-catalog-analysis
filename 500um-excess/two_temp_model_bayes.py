@@ -238,12 +238,17 @@ def calc_model(waves, norm_cold, tdust_cold, beta_cold,
 
 
 # Log-likelihood
-def log_like(theta, x, y, sigma, fix_beta_cold, tdust_warm, beta_warm, zz):
-    if ~fix_beta_cold:
+def log_like(theta, x, y, sigma, fix_beta_cold, fix_tdust_warm, beta_warm, zz):
+    if (fix_beta_cold is None):
         norm_cold, tdust_cold, beta_cold, norm_warm = theta
+        tdust_warm = fix_tdust_warm
+    elif (fix_tdust_warm is None):
+        norm_cold, tdust_cold, norm_warm, tdust_warm = theta
+        beta_cold = fix_beta_cold
     else:
         norm_cold, tdust_cold, norm_warm = theta
         beta_cold = fix_beta_cold
+        tdust_warm = fix_tdust_warm
     model = calc_model(x, norm_cold, tdust_cold, beta_cold,
                        norm_warm, tdust_warm, beta_warm, zz)
 
@@ -253,11 +258,15 @@ def log_like(theta, x, y, sigma, fix_beta_cold, tdust_warm, beta_warm, zz):
 
 # Log prior distribution, uniform priors with limits for beta_cold, tdust_cold,
 # norm_cold, and norm_warm
-def log_prior(theta, fix_beta_cold):
+def log_prior(theta, fix_beta_cold, fix_tdust_warm):
 
-    if ~fix_beta_cold:
+    if (fix_beta_cold is None):
         norm_cold, tdust_cold, beta_cold, norm_warm = theta
         if 0 < tdust_cold < 50 and 0 < beta_cold < 5:
+            return 0
+    elif (fix_tdust_warm is None):
+        norm_cold, tdust_cold, norm_warm, tdust_warm = theta
+        if 0 < tdust_cold < 50 and 50 < tdust_warm < 100:
             return 0
     else:
         norm_cold, tdust_cold, norm_warm = theta
@@ -267,17 +276,17 @@ def log_prior(theta, fix_beta_cold):
 
 
 # Log posterior = log-likelihood + log-prior
-def log_post(theta, x, y, yerr, fix_beta_cold, tdust_warm, beta_warm, zz):
-    lp = log_prior(theta, fix_beta_cold)
+def log_post(theta, x, y, yerr, fix_beta_cold, fix_tdust_warm, beta_warm, zz):
+    lp = log_prior(theta, fix_beta_cold, fix_tdust_warm)
     llike = log_like(theta, x, y, yerr,
-                     fix_beta_cold, tdust_warm, beta_warm, zz)
+                     fix_beta_cold, fix_tdust_warm, beta_warm, zz)
     if not np.isfinite(lp) or not np.isfinite(llike):
         return -np.inf
     return lp + llike
 
 
 # Main fitting routine
-def fit_two_temp_bayes(sed, fix_beta_cold=False, tdust_warm=60,
+def fit_two_temp_bayes(sed, fix_beta_cold=None, fix_tdust_warm=60,
                        beta_warm=2, nwalkers=50, nburn=200, nsteps=1000):
 
     # Convert fluxes to Jy
@@ -295,25 +304,35 @@ def fit_two_temp_bayes(sed, fix_beta_cold=False, tdust_warm=60,
     zz = sed.redshift
 
     # Initial guesses for parameters
-    tdust_warm_guess = tdust_warm
     beta_warm_guess = beta_warm
-    norm_warm_guess = np.log10(y[0]/greybody(c_micron/22., 0.,
-                               tdust_warm_guess, beta_warm_guess))
     tdust_cold_guess = 25.
-    if ~fix_beta_cold:
+    if (fix_beta_cold is None) and (fix_tdust_warm is None):
+        raise ValueError('betaCold and Twarm cannot both be free parameters.')
+    elif (fix_beta_cold is None):
         beta_cold_guess = 2.0
+        tdust_warm_guess = fix_tdust_warm
+        ndims = 4
+    elif (fix_tdust_warm is None):
+        beta_cold_guess = fix_beta_cold
+        tdust_warm_guess = 60.
         ndims = 4
     else:
         beta_cold_guess = fix_beta_cold
+        tdust_warm_guess = fix_tdust_warm
         ndims = 3
     norm_cold_guess = np.log10(y[2]/greybody(c_micron/160., 0.,
                                tdust_cold_guess, beta_cold_guess))
-
+    norm_warm_guess = np.log10(y[0]/greybody(c_micron/22., 0.,
+                               tdust_warm_guess, beta_warm_guess))
     # Need guesses for each walker
     # Randomly perturb from initial guesses
-    if ~fix_beta_cold:
+    if (fix_beta_cold is None):
         guess = np.array([[norm_cold_guess, tdust_cold_guess, beta_cold_guess,
                            norm_warm_guess] + 1e-4*np.random.randn(ndims)
+                          for k in range(nwalkers)])
+    elif (fix_tdust_warm is None):
+        guess = np.array([[norm_cold_guess, tdust_cold_guess, norm_warm_guess,
+                           tdust_warm_guess] + 1e-4*np.random.randn(ndims)
                           for k in range(nwalkers)])
     else:
         guess = np.array([[norm_cold_guess, tdust_cold_guess, norm_warm_guess]
@@ -323,7 +342,7 @@ def fit_two_temp_bayes(sed, fix_beta_cold=False, tdust_warm=60,
     # Setup MCMC sampler
     sampler = emcee.EnsembleSampler(nwalkers, ndims, log_post,
                                     args=(x, y, yerr, fix_beta_cold,
-                                          tdust_warm, beta_warm, zz),
+                                          fix_tdust_warm, beta_warm, zz),
                                     threads=4)
     # Run the MCMC
     sampler.run_mcmc(guess, nsteps)
@@ -338,14 +357,29 @@ def fit_two_temp_bayes(sed, fix_beta_cold=False, tdust_warm=60,
     # Calculate the 2.5, 16, 50, 84, and 97.5 percentiles
     norm_cold = np.percentile(samples_noburn[:, 0], [2.5, 16, 50, 84, 97.5])
     tdust_cold = np.percentile(samples_noburn[:, 1], [2.5, 16, 50, 84, 97.5])
-    beta_cold = np.percentile(samples_noburn[:, 2], [2.5, 16, 50, 84, 97.5])
-    norm_warm = np.percentile(samples_noburn[:, 3], [2.5, 16, 50, 84, 97.5])
+    if (fix_beta_cold is None):
+        beta_cold = np.percentile(samples_noburn[:, 2],
+                                  [2.5, 16, 50, 84, 97.5])
+        norm_warm = np.percentile(samples_noburn[:, 3],
+                                  [2.5, 16, 50, 84, 97.5])
+        tdust_warm = fix_tdust_warm
+    elif (fix_tdust_warm is None):
+        norm_warm = np.percentile(samples_noburn[:, 2],
+                                  [2.5, 16, 50, 84, 97.5])
+        tdust_warm = np.percentile(samples_noburn[:, 3],
+                                   [2.5, 16, 50, 84, 97.5])
+        beta_cold = fix_beta_cold
+    else:
+        norm_warm = np.percentile(samples_noburn[:, 2],
+                                  [2.5, 16, 50, 84, 97.5])
+        tdust_warm = fix_tdust_warm
+        beta_cold = fix_beta_cold
 
     # Return the percentiles and the samples
     result = {'samples_all': samples_all,
               'samples_noburn': samples_noburn,
-              'tdust_warm': tdust_warm_guess,
-              'beta_warm': beta_warm_guess,
+              'tdust_warm': tdust_warm,
+              'beta_warm': beta_warm,
               'norm_warm': norm_warm,
               'norm_cold': norm_cold,
               'tdust_cold': tdust_cold,

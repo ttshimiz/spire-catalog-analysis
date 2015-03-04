@@ -26,16 +26,8 @@ import pickle
 
 seaborn.set()
 
-# Parameters for the fitting
-fix_beta_cold = False
-tdust_warm = 60.
-beta_warm = 2.0
-nwalkers = 50
-nburn = 200
-nsteps = 1000
-
-# Directory where results will be saved
-results_dir = 'results/betaFree/'
+# Directory where all of the data is stored
+data_dir = '/Users/ttshimiz/Research/Thesis/bat-data/'
 
 
 # Functions for analysis
@@ -95,148 +87,175 @@ def calc_excess(trace, obs500, zz=0, fix_beta_cold=False, tdust_warm=60.,
 
     return excess500
 
-# Directory where all of the data is stored
-data_dir = '/Users/ttshimiz/Research/Thesis/bat-data/'
 
-# Upload the Herschel and WISE data
-herschel_data = pd.read_csv(data_dir+'bat_herschel.csv', index_col=0)
-wise_data = pd.read_csv(data_dir+'bat_wise.csv', index_col=0)
+def run_all_sources(fix_beta_cold=None, fix_tdust_warm=60., beta_warm=2.0,
+                    nwalkers=50, nburn=200, nsteps=1000,
+                    results_dir='results/betaFree/',
+                    fsuffix='_betafree_twotemp_500excess'):
 
-# Upload the general information for the BAT sources
-gen_data = pd.read_csv(data_dir+'bat_info.csv', index_col=0)
+    # Upload the Herschel and WISE data
+    herschel_data = pd.read_csv(data_dir+'bat_herschel.csv', index_col=0)
+    wise_data = pd.read_csv(data_dir+'bat_wise.csv', index_col=0)
 
-# We will use the 22, 70, 160, 250, 350, and 500 micron data
-# We also need the redshift as well
-fluxes = pd.DataFrame({'W4': wise_data.W4,
-                       'H70': herschel_data.H_70,
-                       'H160': herschel_data.H_160,
-                       'H250': herschel_data.H_250,
-                       'H350': herschel_data.H_350,
-                       'H500': herschel_data.H_500})
+    # Upload the general information for the BAT sources
+    gen_data = pd.read_csv(data_dir+'bat_info.csv', index_col=0)
 
-flux_err = pd.DataFrame({'W4_err': wise_data.W4_err,
-                         'H70_err': herschel_data.H_70_err,
-                         'H160_err': herschel_data.H_160_err,
-                         'H250_err': herschel_data.H_250_err,
-                         'H350_err': herschel_data.H_350_err,
-                         'H500_err': herschel_data.H_500_err})
+    # We will use the 22, 70, 160, 250, 350, and 500 micron data
+    # We also need the redshift as well
+    fluxes = pd.DataFrame({'W4': wise_data.W4,
+                           'H70': herschel_data.H_70,
+                           'H160': herschel_data.H_160,
+                           'H250': herschel_data.H_250,
+                           'H350': herschel_data.H_350,
+                           'H500': herschel_data.H_500})
 
-redshifts = gen_data.Redshift
+    flux_err = pd.DataFrame({'W4_err': wise_data.W4_err,
+                             'H70_err': herschel_data.H_70_err,
+                             'H160_err': herschel_data.H_160_err,
+                             'H250_err': herschel_data.H_250_err,
+                             'H350_err': herschel_data.H_350_err,
+                             'H500_err': herschel_data.H_500_err})
 
-# Find all of the sources that are detected at every wavelength
-detect_all = (fluxes > 0).all(axis=1)
+    redshifts = gen_data.Redshift
 
-# Sources that break the fitting. Skip for now
-skip_sources = ['ESO157-G023']
+    # Find all of the sources that are detected at every wavelength
+    detect_all = (fluxes > 0).all(axis=1)
 
-# Iterate over all of the sources
-waves = np.array([22., 70., 160., 250., 350.])*u.micron
+    # Iterate over all of the sources
+    waves = np.array([22., 70., 160., 250., 350.])*u.micron
 
-for idx in fluxes[detect_all].index[21:]:
-    print 'Running analysis on ...' + idx
-    flux_src = fluxes.loc[idx][['W4', 'H70', 'H160', 'H250', 'H350']]
-    flux_err_src = flux_err.loc[idx][['W4_err', 'H70_err', 'H160_err',
-                                      'H250_err', 'H350_err']]
-    zz_src = redshifts.loc[idx]
+    for idx in fluxes[detect_all].index[0:2]:
+        print 'Running analysis on ...' + idx
+        flux_src = fluxes.loc[idx][['W4', 'H70', 'H160', 'H250', 'H350']]
+        flux_err_src = flux_err.loc[idx][['W4_err', 'H70_err', 'H160_err',
+                                          'H250_err', 'H350_err']]
+        zz_src = redshifts.loc[idx]
 
-    sed = ttmb.SED(waves,
-                   np.array(flux_src)*u.Jy,
-                   np.array(flux_err_src)*u.Jy,
-                   z=zz_src)
-    print '\tFitting model...'
-    fit_results = ttmb.fit_two_temp_bayes(sed, fix_beta_cold=fix_beta_cold,
-                                          tdust_warm=tdust_warm,
-                                          beta_warm=beta_warm,
-                                          nwalkers=nwalkers,
-                                          nburn=nburn,
-                                          nsteps=nsteps)
+        sed = ttmb.SED(waves,
+                       np.array(flux_src)*u.Jy,
+                       np.array(flux_err_src)*u.Jy,
+                       z=zz_src)
+        print '\tFitting model...'
+        fit_results = ttmb.fit_two_temp_bayes(sed, fix_beta_cold=fix_beta_cold,
+                                              fix_tdust_warm=fix_tdust_warm,
+                                              beta_warm=beta_warm,
+                                              nwalkers=nwalkers,
+                                              nburn=nburn,
+                                              nsteps=nsteps)
 
-    # Calculate the 500 micron excess
-    flux500 = fluxes.loc[idx]['H500']
-    print '\tCalculating 500 micron excess...'
-    excess500 = calc_excess(fit_results['samples_noburn'], flux500, zz_src)
-    print '\tPlotting and saving results...'
-    # Plot a corner triangle figure to look at relationships between parameters
-    fig_tri = triangle.corner(fit_results['samples_noburn'],
-                              labels=[r'$N_{\mathrm{cold}}$',
-                                      r'$T_{\mathrm{cold}}$',
-                                      r'$\beta_{\mathrm{cold}}$',
-                                      r'$N_{\mathrm{warm}}$'],
-                              quantiles=[0.16, 0.5, 0.84],
-                              verbose=False)
+        # Calculate the 500 micron excess
+        flux500 = fluxes.loc[idx]['H500']
+        print '\tCalculating 500 micron excess...'
+        excess500 = calc_excess(fit_results['samples_noburn'], flux500, zz_src)
+        print '\tPlotting and saving results...'
 
-    # Save the triangle plot
-    fig_tri.savefig(results_dir + 'triangle_plots/' + idx +
-                    '_betaFree_twotemp_500excess_triangle.png',
-                    bbox_inches='tight')
-    plt.close(fig_tri)
+        if (fix_beta_cold is None):
+            labels = [r'$N_{\mathrm{cold}}$',
+                      r'$T_{\mathrm{cold}}$',
+                      r'$\beta_{\mathrm{cold}}$',
+                      r'$N_{\mathrm{warm}}$']
+        elif (fix_tdust_warm is None):
+            labels = [r'$N_{\mathrm{cold}}$',
+                      r'$T_{\mathrm{cold}}$',
+                      r'$N_{\mathrm{warm}}$',
+                      r'$T_{\mathrm{warm}}$']
+        else:
+            labels = [r'$N_{\mathrm{cold}}$',
+                      r'$T_{\mathrm{cold}}$',
+                      r'$N_{\mathrm{warm}}$']
 
-    # Plot the data along with the median SED. Shade in the 95% confidence
-    # interval
-    # Wavelengths to calculate the model SEDs at
-    model_wave = np.arange(1, 1000, 1)
+        # Plot a corner triangle figure to look at relationships
+        # between parameters
+        fig_tri = triangle.corner(fit_results['samples_noburn'],
+                                  labels=labels,
+                                  quantiles=[0.16, 0.5, 0.84],
+                                  verbose=False)
 
-    # Randomly choose 1000 modeled parameters
-    param_rand = np.random.randint(low=0, high=((nsteps-nburn)*nwalkers),
+        # Save the triangle plot
+        fig_tri.savefig(results_dir + 'triangle_plots/' + idx +
+                        fsuffix + '_triangle.png',
+                        bbox_inches='tight')
+        plt.close(fig_tri)
+
+        # Plot the data along with the median SED. Shade in the 95% confidence
+        # interval
+        # Wavelengths to calculate the model SEDs at
+        model_wave = np.arange(1, 1000, 1)
+
+        # Randomly choose 1000 modeled parameters
+        p_rand = np.random.randint(low=0, high=((nsteps-nburn)*nwalkers),
                                    size=1000)
-    model_ncold = fit_results['samples_noburn'][param_rand, 0][:, None]
-    model_tcold = fit_results['samples_noburn'][param_rand, 1][:, None]
-    if ~fix_beta_cold:
-        model_betacold = fit_results['samples_noburn'][param_rand, 2][:, None]
-        model_nwarm = fit_results['samples_noburn'][param_rand, 3][:, None]
-    else:
-        model_betacold = (np.ones(len(model_ncold))*fix_beta_cold)[:, None]
-        model_nwarm = fit_results['samples_noburn'][param_rand, 2][:, None]
-    model_twarm = (np.ones(len(model_ncold))*tdust_warm)[:, None]
-    model_betawarm = (np.ones(len(model_ncold))*beta_warm)[:, None]
-    model_fluxes = ttmb.twotemp_model(model_wave/(1+zz_src),
-                                      model_ncold,
-                                      model_tcold,
-                                      model_betacold,
-                                      model_nwarm,
-                                      model_twarm,
-                                      model_betawarm)
+        model_ncold = fit_results['samples_noburn'][p_rand, 0][:, None]
+        model_tcold = fit_results['samples_noburn'][p_rand, 1][:, None]
 
-    # 2.5%, 50%, and 97.5% percentile to form median and
-    # 95% spread in model SEDs
-    model_2_5, model_50, model_97_5 = np.percentile(model_fluxes,
-                                                    [2.5, 50., 97.5], axis=0)
+        if (fix_beta_cold is None):
+            model_betacold = fit_results['samples_noburn'][p_rand, 2][:, None]
+            model_nwarm = fit_results['samples_noburn'][p_rand, 3][:, None]
+            model_twarm = (np.ones(len(model_ncold))*fix_tdust_warm)[:, None]
 
-    # Plotting SEDs
-    cp = seaborn.color_palette()
-    fig_sed = plt.figure()
-    ax = fig_sed.add_subplot(1, 1, 1)
-    ax.loglog(model_wave, model_50, color=cp[0], lw=2)
-    ax.fill_between(model_wave, model_2_5, model_97_5, color=cp[0], alpha=0.3)
-    ax.errorbar(waves.value, flux_src, yerr=flux_err_src, fmt='o', color='k',
-                ms=8, ls='None')
-    ax.errorbar(500., flux500, yerr=flux_err.loc[idx]['H500_err'],
-                fmt='o', color=cp[2], ms=8, ls='None')
-    ax.set_ylim(np.min([flux_src.min(), flux500])*10**(-0.5),
-                np.max(model_97_5)*10**(0.5))
-    ax.set_xlim(10, 1000)
-    ax.set_xlabel(r'$\lambda$ [$\mu$m]')
-    ax.set_ylabel(r'$F_{\nu}$ [Jy]')
-    ax.text(0.05, 0.95, idx, ha='left', va='center', transform=ax.transAxes)
+        elif (fix_tdust_warm is None):
+            model_betacold = (np.ones(len(model_ncold))*fix_beta_cold)[:, None]
+            model_nwarm = fit_results['samples_noburn'][p_rand, 2][:, None]
+            model_twarm = fit_results['samples_noburn'][p_rand, 3][:, None]
 
-    # Save SED figure
-    fig_sed.savefig(results_dir + 'sed_plots/' + idx +
-                    '_betaFree_twotemp_500excess_sed.png',
-                    bbox_inches='tight')
-    plt.close(fig_sed)
+        else:
+            model_betacold = (np.ones(len(model_ncold))*fix_beta_cold)[:, None]
+            model_twarm = (np.ones(len(model_ncold))*fix_tdust_warm)[:, None]
+            model_nwarm = fit_results['samples_noburn'][p_rand, 2][:, None]
 
-    # Save the 500 micron excess dictionary as a pickle
-    excess_file = open(results_dir + 'excess500/' + idx +
-                       '_betaFree_twotemp_500excess.pickle', 'wb')
-    pickle.dump(excess500, excess_file)
-    excess_file.close()
+        model_betawarm = (np.ones(len(model_ncold))*beta_warm)[:, None]
+        model_fluxes = ttmb.twotemp_model(model_wave/(1+zz_src),
+                                          model_ncold,
+                                          model_tcold,
+                                          model_betacold,
+                                          model_nwarm,
+                                          model_twarm,
+                                          model_betawarm)
 
-    # Save the MCMC results
-    mcmc_results_file = open(results_dir + 'mcmc_fits/' + idx +
-                             '_betaFree_twotemp_500excess_mcmc.pickle', 'wb')
-    pickle.dump(fit_results, mcmc_results_file)
-    mcmc_results_file.close()
+        # 2.5%, 50%, and 97.5% percentile to form median and
+        # 95% spread in model SEDs
+        model_2_5, model_50, model_97_5 = np.percentile(model_fluxes,
+                                                        [2.5, 50., 97.5],
+                                                        axis=0)
 
-    print '\tDone!'
-    print ''
-print 'Done with all sources!'
+        # Plotting SEDs
+        cp = seaborn.color_palette()
+        fig_sed = plt.figure()
+        ax = fig_sed.add_subplot(1, 1, 1)
+        ax.loglog(model_wave, model_50, color=cp[0], lw=2)
+        ax.fill_between(model_wave, model_2_5, model_97_5, color=cp[0],
+                        alpha=0.3)
+        ax.errorbar(waves.value, flux_src, yerr=flux_err_src, fmt='o',
+                    color='k', ms=8, ls='None')
+        ax.errorbar(500., flux500, yerr=flux_err.loc[idx]['H500_err'],
+                    fmt='o', color=cp[2], ms=8, ls='None')
+        ax.set_ylim(np.min([flux_src.min(), flux500])*10**(-0.5),
+                    np.max(model_97_5)*10**(0.5))
+        ax.set_xlim(10, 1000)
+        ax.set_xlabel(r'$\lambda$ [$\mu$m]')
+        ax.set_ylabel(r'$F_{\nu}$ [Jy]')
+        ax.text(0.05, 0.95, idx, ha='left', va='center',
+                transform=ax.transAxes)
+
+        # Save SED figure
+        fig_sed.savefig(results_dir + 'sed_plots/' + idx +
+                        fsuffix + '_sed.png',
+                        bbox_inches='tight')
+        plt.close(fig_sed)
+
+        # Save the 500 micron excess dictionary as a pickle
+        excess_file = open(results_dir + 'excess500/' + idx +
+                           fsuffix + '.pickle', 'wb')
+        pickle.dump(excess500, excess_file)
+        excess_file.close()
+
+        # Save the MCMC results
+        mcmc_results_file = open(results_dir + 'mcmc_fits/' + idx +
+                                 fsuffix + '_mcmc.pickle',
+                                 'wb')
+        pickle.dump(fit_results, mcmc_results_file)
+        mcmc_results_file.close()
+
+        print '\tDone!'
+        print ''
+    print 'Done with all sources!'

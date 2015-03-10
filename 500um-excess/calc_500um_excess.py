@@ -35,7 +35,7 @@ def excess(model, observed):
     return (observed - model) / model
 
 
-def calc_excess(trace, obs500, zz=0, fix_beta_cold=False, tdust_warm=60.,
+def calc_excess(trace, obs500, zz=0, fix_beta_cold=False, fix_tdust_warm=60.,
                 beta_warm=2.0):
     """
     Function that calculates the 500 micron excess for every modeled SED.
@@ -61,11 +61,17 @@ def calc_excess(trace, obs500, zz=0, fix_beta_cold=False, tdust_warm=60.,
     # Calculate the modeled 500 micron flux
     norm_cold_model = trace[:, 0]
     tdust_cold_model = trace[:, 1]
-    if ~fix_beta_cold:
+    if (fix_beta_cold is None):
         beta_cold_model = trace[:, 2]
         norm_warm_model = trace[:, 3]
-    else:
+        tdust_warm_model = np.ones(len(norm_cold_model))*fix_tdust_warm
+    elif (fix_tdust_warm is None):
         beta_cold_model = np.ones(len(norm_cold_model))*fix_beta_cold
+        norm_warm_model = trace[:, 2]
+        tdust_warm_model = trace[:, 3]
+    else:
+    	beta_cold_model = np.ones(len(norm_cold_model))*fix_beta_cold
+        tdust_warm_model = np.ones(len(norm_cold_model))*fix_tdust_warm
         norm_warm_model = trace[:, 2]
 
     model500 = np.zeros(len(norm_cold_model))
@@ -73,7 +79,7 @@ def calc_excess(trace, obs500, zz=0, fix_beta_cold=False, tdust_warm=60.,
         model500[i] = ttmb.calc_model([500.], norm_cold_model[i],
                                       tdust_cold_model[i],
                                       beta_cold_model[i], norm_warm_model[i],
-                                      tdust_warm, beta_warm, zz)
+                                      tdust_warm_model[i], beta_warm, zz)
 
     e500 = excess(model500, obs500)
     p2_5, p16, p50, p84, p97_5 = np.percentile(e500, q=[2.5, 16, 50, 84, 97.5])
@@ -124,7 +130,7 @@ def run_all_sources(fix_beta_cold=None, fix_tdust_warm=60., beta_warm=2.0,
     # Iterate over all of the sources
     waves = np.array([22., 70., 160., 250., 350.])*u.micron
 
-    for idx in fluxes[detect_all].index[0:2]:
+    for idx in fluxes[detect_all].index[131:]:
         print 'Running analysis on ...' + idx
         flux_src = fluxes.loc[idx][['W4', 'H70', 'H160', 'H250', 'H350']]
         flux_err_src = flux_err.loc[idx][['W4_err', 'H70_err', 'H160_err',
@@ -146,7 +152,9 @@ def run_all_sources(fix_beta_cold=None, fix_tdust_warm=60., beta_warm=2.0,
         # Calculate the 500 micron excess
         flux500 = fluxes.loc[idx]['H500']
         print '\tCalculating 500 micron excess...'
-        excess500 = calc_excess(fit_results['samples_noburn'], flux500, zz_src)
+        excess500 = calc_excess(fit_results['samples_noburn'], flux500, zz_src,
+                                fix_beta_cold=fix_beta_cold,
+                                fix_tdust_warm=fix_tdust_warm)
         print '\tPlotting and saving results...'
 
         if (fix_beta_cold is None):

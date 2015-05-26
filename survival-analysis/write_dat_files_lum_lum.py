@@ -14,7 +14,7 @@ wavebands = ['70', '160', '250', '350', '500', 'BAT']
 
 for n in range(len(wavebands)):
 	for j in range(len(wavebands)):
-		if n < j:
+		if j==5:
 			
 			execfile('/Users/ttshimiz/Dropbox/Research/Thesis/scripts/upload_bat_ir_database.py')
 			if n == 0:
@@ -77,7 +77,7 @@ for n in range(len(wavebands)):
 			b = (spire_color_350_500 < 1.5) & (isfinite(spire_color_350_500)) & (spire_color_350_500 != 0)
 			c = a & b
 			
-			idx = (indep_var != 0) & (dep_var != 0)
+			idx = (indep_var != 0) & (dep_var != 0) & (dep_var > 1e43)
 			indep_var = indep_var[idx]
 			dep_var = dep_var[idx]
 			censor_indep = censor_indep[idx]
@@ -86,4 +86,4 @@ for n in range(len(wavebands)):
 			dist_sq = dist_sq[idx]
 		
 			asurv_dat = transpose(vstack([log10(indep_var), censor_indep, log10(dep_var), censor_dep, dist_sq, censor_dist]))
-			savetxt(github_dir+'/l'+wavebands[n]+'_l'+str(wavebands[j])+'.dat', asurv_dat, fmt = ['%10.6g', '%i', '%10.6g', '%i', '%10.6g', '%i'])
+			savetxt(github_dir+'/l'+wavebands[n]+'_l'+str(wavebands[j])+'_highL.dat', asurv_dat, fmt = ['%10.6g', '%i', '%10.6g', '%i', '%10.6g', '%i'])

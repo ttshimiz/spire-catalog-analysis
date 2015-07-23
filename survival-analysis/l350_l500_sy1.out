@@ -1,7 +1,7 @@
- Tau(1,2):  0.355160534    
- Tau(1,3):  0.155994922    
- Tau(2,3):  0.111282423    
- --> Partial Kendalls tau:  0.344125122    
+ Tau(1,2):  0.345290303    
+ Tau(1,3):  0.174451604    
+ Tau(2,3):  0.130193546    
+ --> Partial Kendalls tau:  0.330413640    
    
  Calculating variance...this takes some time....
    
@@ -130,31 +130,7 @@
          123
          124
          125
-         126
-         127
-         128
-         129
-         130
-         131
-         132
-         133
-         134
-         135
-         136
-         137
-         138
-         139
-         140
-         141
-         142
-         143
-         144
-         145
-         146
-         147
-         148
-         149
- Square root of variance (sigma):   4.00361940E-02
+ Square root of variance (sigma):   4.27994542E-02
    
- Z-score:    8.59535027    
+ Z-score:    7.72004318    
  Zero partial correlation rejected at level 0.05
